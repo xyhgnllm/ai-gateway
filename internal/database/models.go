@@ -8,6 +8,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiKey struct {
+	ID         int64
+	UserID     int64
+	Name       string
+	KeyHash    string
+	KeyPrefix  string
+	Status     string
+	LastUsedAt pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+}
+
+type Model struct {
+	ID                    int64
+	Name                  string
+	Provider              string
+	InputPricePer1kCents  int64
+	OutputPricePer1kCents int64
+	Status                string
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
+type UsageLog struct {
+	ID                int64
+	UserID            int64
+	ApiKeyID          pgtype.Int8
+	Model             string
+	Endpoint          string
+	StatusCode        int32
+	Success           bool
+	RequestBodyBytes  int64
+	ResponseBodyBytes int64
+	CreatedAt         pgtype.Timestamptz
+	CostCents         int64
+}
+
 type User struct {
 	ID           int64
 	Email        string

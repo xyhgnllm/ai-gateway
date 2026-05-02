@@ -16,7 +16,7 @@ func main() {
 	defer pool.Close()
 
 	queries := database.New(pool)
-	r := router.New(queries, cfg.JWTSercet)
+	r := router.New(queries, cfg.JWTSecret, cfg.OpenAIAPIKey, cfg.OpenAIBaseURL)
 
 	log.Printf("server running on :%s", cfg.AppPort)
 	err := http.ListenAndServe(":"+cfg.AppPort, r)

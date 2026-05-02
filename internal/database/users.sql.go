@@ -9,6 +9,36 @@ import (
 	"context"
 )
 
+const addUserBalance = `-- name: AddUserBalance :one
+UPDATE users
+SET balance_cents = balance_cents + $2,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, email, password_hash, name, role, status, balance_cents, created_at, updated_at
+`
+
+type AddUserBalanceParams struct {
+	ID           int64
+	BalanceCents int64
+}
+
+func (q *Queries) AddUserBalance(ctx context.Context, arg AddUserBalanceParams) (User, error) {
+	row := q.db.QueryRow(ctx, addUserBalance, arg.ID, arg.BalanceCents)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.Role,
+		&i.Status,
+		&i.BalanceCents,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users(
 email,password_hash,name) VALUES ($1,$2,$3) RETURNING id, email, password_hash, name, role, status, balance_cents, created_at, updated_at
@@ -22,6 +52,37 @@ type CreateUserParams struct {
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, createUser, arg.Email, arg.PasswordHash, arg.Name)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.Role,
+		&i.Status,
+		&i.BalanceCents,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deductUserBalance = `-- name: DeductUserBalance :one
+UPDATE users
+SET balance_cents = balance_cents - $2,
+    updated_at = NOW()
+WHERE id = $1
+  AND balance_cents >= $2
+RETURNING id, email, password_hash, name, role, status, balance_cents, created_at, updated_at
+`
+
+type DeductUserBalanceParams struct {
+	ID           int64
+	BalanceCents int64
+}
+
+func (q *Queries) DeductUserBalance(ctx context.Context, arg DeductUserBalanceParams) (User, error) {
+	row := q.db.QueryRow(ctx, deductUserBalance, arg.ID, arg.BalanceCents)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -77,4 +138,46 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, email, password_hash, name, role, status, balance_cents, created_at, updated_at
+FROM users
+ORDER BY id DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListUsersParams struct {
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsers, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.PasswordHash,
+			&i.Name,
+			&i.Role,
+			&i.Status,
+			&i.BalanceCents,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

@@ -10,7 +10,11 @@ import (
 
 type contextKey string
 
-const UserIDKey contextKey = "user_id"
+const (
+	UserIDKey   contextKey = "user_id"
+	APIKeyIDKey contextKey = "api_key_id"
+	RoleKey     contextKey = "role"
+)
 
 func JWT(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -51,8 +55,24 @@ func JWT(secret string) func(http.Handler) http.Handler {
 			}
 
 			userID := int64(userIDFloat)
+
+			role, _ := claims["role"].(string)
+
 			ctx := context.WithValue(r.Context(), UserIDKey, userID)
+			ctx = context.WithValue(ctx, RoleKey, role)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		role, ok := r.Context().Value(RoleKey).(string)
+		if !ok || role != "admin" {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

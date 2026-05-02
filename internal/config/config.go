@@ -8,9 +8,11 @@ import (
 )
 
 type Config struct {
-	AppPort   string
-	DBURL     string
-	JWTSercet string
+	AppPort       string
+	DBURL         string
+	JWTSecret     string
+	OpenAIBaseURL string
+	OpenAIAPIKey  string
 }
 
 func Load() *Config {
@@ -20,9 +22,11 @@ func Load() *Config {
 	}
 
 	return &Config{
-		AppPort:   getEnv("APP_PORT", "8080"),
-		DBURL:     getEnv("DB_URL", ""),
-		JWTSercet: getEnv("JWT_SECRET", "dev-secret"),
+		AppPort:       getEnv("APP_PORT", "8080"),
+		DBURL:         getEnv("DB_URL", ""),
+		JWTSecret:     getEnv("JWT_SECRET", "dev-secret"),
+		OpenAIBaseURL: getEnv("OPENAI_BASE_URL", "https://api.openai.com"),
+		OpenAIAPIKey:  getEnv("OPENAI_API_KEY", ""),
 	}
 }
 

@@ -1,0 +1,2 @@
+ALTER TABLE usage_logs
+ADD COLUMN cost_cents BIGINT NOT NULL DEFAULT 0;
