@@ -25,3 +25,11 @@ WHERE key_hash = $1
 UPDATE api_keys
 SET last_used_at = NOW()
 WHERE id = $1;
+
+
+-- name: UpdateAPIKeyStatus :one
+UPDATE api_keys
+SET status = $2
+WHERE id = $1
+  AND user_id = $3
+RETURNING *;

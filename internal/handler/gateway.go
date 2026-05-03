@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -26,6 +27,21 @@ func NewGatewayHandler(queries *database.Queries, openAIBaseURL string, openAIAP
 		openAIBaseURL: openAIBaseURL,
 		openAIAPIKey:  openAIAPIKey,
 	}
+}
+
+func (h *GatewayHandler) forwardToOpenAI(ctx context.Context, requestBody []byte) (*http.Response, error) {
+	upstreamURL := h.openAIBaseURL + "/v1/chat/completions"
+
+	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamURL, bytes.NewReader(requestBody))
+	if err != nil {
+		return nil, err
+	}
+
+	upstreamReq.Header.Set("Content-Type", "application/json")
+	upstreamReq.Header.Set("Authorization", "Bearer "+h.openAIAPIKey)
+
+	return http.DefaultClient.Do(upstreamReq)
+
 }
 
 func (h *GatewayHandler) GatewayTest(w http.ResponseWriter, r *http.Request) {
@@ -66,17 +82,6 @@ func (h *GatewayHandler) ChatCompletions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	user, err := h.queries.GetUserByID(r.Context(), userID)
-	if err != nil {
-		response.Fail(w, http.StatusUnauthorized, 401, "user not found")
-		return
-	}
-
-	if user.BalanceCents <= 0 {
-		response.Fail(w, http.StatusPaymentRequired, 402, "insufficient balance")
-		return
-	}
-
 	requestBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		response.Fail(w, http.StatusBadRequest, 400, "read request body failed")
@@ -87,36 +92,35 @@ func (h *GatewayHandler) ChatCompletions(w http.ResponseWriter, r *http.Request)
 	_ = json.Unmarshal(requestBody, &payload)
 
 	payload.Model = strings.TrimSpace(payload.Model)
-
 	if payload.Model == "" {
 		response.Fail(w, http.StatusBadRequest, 400, "model is required")
 		return
 	}
+
 	model, err := h.queries.GetActiveModelByName(r.Context(), payload.Model)
 	if err != nil {
 		response.Fail(w, http.StatusBadRequest, 400, "model not available")
 		return
 	}
 
-	_ = model
+	costCents := model.InputPricePer1kCents
+	if costCents <= 0 {
+		costCents = 1
+	}
 
-	upstreamURL := h.openAIBaseURL + "/v1/chat/completions"
-
-	upstreamReq, err := http.NewRequestWithContext(
-		r.Context(),
-		http.MethodPost,
-		upstreamURL,
-		bytes.NewReader(requestBody),
-	)
+	user, err := h.queries.GetUserByID(r.Context(), userID)
 	if err != nil {
-		response.Fail(w, http.StatusInternalServerError, 500, "create upstream request failed")
+		response.Fail(w, http.StatusUnauthorized, 401, "user not found")
 		return
 	}
 
-	upstreamReq.Header.Set("Content-Type", "application/json")
-	upstreamReq.Header.Set("Authorization", "Bearer "+h.openAIAPIKey)
+	if user.BalanceCents < costCents {
+		response.Fail(w, http.StatusPaymentRequired, 402, "insufficient banlance")
+		return
+	}
 
-	upstreamResp, err := http.DefaultClient.Do(upstreamReq)
+	upstreamResp, err := h.forwardToOpenAI(r.Context(), requestBody)
+
 	if err != nil {
 		response.Fail(w, http.StatusBadGateway, 502, "upstream request failed")
 		return
@@ -127,11 +131,12 @@ func (h *GatewayHandler) ChatCompletions(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		response.Fail(w, http.StatusBadGateway, 502, "read upstream response failed")
 		return
+
 	}
 
-	costCents := int64(1)
+	success := upstreamResp.StatusCode >= 200 && upstreamResp.StatusCode < 300
 
-	if upstreamResp.StatusCode >= 200 && upstreamResp.StatusCode < 300 {
+	if success {
 		_, err = h.queries.DeductUserBalance(r.Context(), database.DeductUserBalanceParams{
 			ID:           userID,
 			BalanceCents: costCents,
@@ -149,7 +154,7 @@ func (h *GatewayHandler) ChatCompletions(w http.ResponseWriter, r *http.Request)
 		Model:             payload.Model,
 		Endpoint:          "/v1/chat/completions",
 		StatusCode:        int32(upstreamResp.StatusCode),
-		Success:           upstreamResp.StatusCode >= 200 && upstreamResp.StatusCode < 300,
+		Success:           success,
 		RequestBodyBytes:  int64(len(requestBody)),
 		ResponseBodyBytes: int64(len(responseBody)),
 		CostCents:         costCents,
@@ -158,4 +163,5 @@ func (h *GatewayHandler) ChatCompletions(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", upstreamResp.Header.Get("Content-Type"))
 	w.WriteHeader(upstreamResp.StatusCode)
 	w.Write(responseBody)
+
 }

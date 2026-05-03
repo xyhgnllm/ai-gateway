@@ -37,7 +37,9 @@ func New(
 		r.Get("/v1/test", gatewayHandler.GatewayTest)
 		r.Post("/v1/chat/completions", gatewayHandler.ChatCompletions)
 		r.Get("/usage-logs", userHandler.ListUsageLogs)
-
+		r.Patch("/api-keys/{id}/disable", userHandler.DisableAPIKey)
+		r.Post("/orders", userHandler.CreateOrder)
+		r.Get("/orders", userHandler.ListMyOrders)
 	})
 
 	r.Group(func(r chi.Router) {
@@ -47,6 +49,9 @@ func New(
 		r.Post("/admin/users/{id}/balance", userHandler.AddBalance)
 		r.Get("/admin/users", userHandler.ListUsers)
 		r.Post("/admin/models", userHandler.CreateModel)
+		r.Get("/admin/models", userHandler.ListModles)
+		r.Patch("/admin/models/{id}/status", userHandler.UpdataModelStatus)
+		r.Post("/admin/orders/{id}/pay", userHandler.PayOrder)
 	})
 
 	return r

@@ -30,6 +30,17 @@ type Model struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
+type Order struct {
+	ID          int64
+	UserID      int64
+	OrderNo     string
+	AmountCents int64
+	Status      string
+	PaidAt      pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type UsageLog struct {
 	ID                int64
 	UserID            int64

@@ -118,3 +118,33 @@ func (q *Queries) UpdateAPIKeyLastUsed(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, updateAPIKeyLastUsed, id)
 	return err
 }
+
+const updateAPIKeyStatus = `-- name: UpdateAPIKeyStatus :one
+UPDATE api_keys
+SET status = $2
+WHERE id = $1
+  AND user_id = $3
+RETURNING id, user_id, name, key_hash, key_prefix, status, last_used_at, created_at
+`
+
+type UpdateAPIKeyStatusParams struct {
+	ID     int64
+	Status string
+	UserID int64
+}
+
+func (q *Queries) UpdateAPIKeyStatus(ctx context.Context, arg UpdateAPIKeyStatusParams) (ApiKey, error) {
+	row := q.db.QueryRow(ctx, updateAPIKeyStatus, arg.ID, arg.Status, arg.UserID)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.KeyHash,
+		&i.KeyPrefix,
+		&i.Status,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
