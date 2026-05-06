@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -91,7 +91,7 @@ func (h *UserHandler) ListMyOrders(w http.ResponseWriter, r *http.Request) {
 
 	orders, err := h.queries.ListOrdersByUser(r.Context(), database.ListOrdersByUserParams{
 		UserID: userID,
-		Limit:  int32(page),
+		Limit:  int32(pageSize),
 		Offset: int32(offset),
 	})
 	if err != nil {

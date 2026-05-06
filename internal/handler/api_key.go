@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 )
 
 type CreateAPIKeyRequest struct {
@@ -66,6 +66,7 @@ func (h *UserHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 
 	response.OK(w, map[string]any{
 		"api_key": map[string]any{
+			"key":        key,
 			"key_prefix": apiKey.KeyPrefix,
 		},
 		"record": apiKey,

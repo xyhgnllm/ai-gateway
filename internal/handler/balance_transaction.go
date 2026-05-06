@@ -8,7 +8,7 @@ import (
 	"ai-gateway/internal/middleware"
 	"ai-gateway/internal/response"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 )
 
 func (h *UserHandler) ListBalanceTransactions(w http.ResponseWriter, r *http.Request) {

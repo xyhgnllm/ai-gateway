@@ -8,7 +8,7 @@ import (
 
 	appmiddleware "ai-gateway/internal/middleware"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -33,18 +33,23 @@ func New(
 
 	r.Group(func(r chi.Router) {
 		r.Use(appmiddleware.JWT(jwtSecret))
-		r.Use(appmiddleware.RateLimit(60, time.Minute))
 
 		r.Get("/me", userHandler.Me)
 		r.Post("/api-keys", userHandler.CreateAPIKey)
 		r.Get("/api-keys", userHandler.ListAPIKeys)
-		r.Get("/v1/test", gatewayHandler.GatewayTest)
-		r.Post("/v1/chat/completions", gatewayHandler.ChatCompletions)
 		r.Get("/usage-logs", userHandler.ListUsageLogs)
 		r.Patch("/api-keys/{id}/disable", userHandler.DisableAPIKey)
 		r.Post("/orders", userHandler.CreateOrder)
 		r.Get("/orders", userHandler.ListMyOrders)
 		r.Get("/balance-transactions", userHandler.ListBalanceTransactions)
+	})
+
+	r.Group(func(r chi.Router) {
+		r.Use(appmiddleware.APIKey(queries))
+		r.Use(appmiddleware.RateLimit(60, time.Minute))
+
+		r.Get("/v1/test", gatewayHandler.GatewayTest)
+		r.Post("/v1/chat/completions", gatewayHandler.ChatCompletions)
 	})
 
 	r.Group(func(r chi.Router) {
@@ -57,6 +62,7 @@ func New(
 		r.Get("/admin/models", userHandler.ListModles)
 		r.Patch("/admin/models/{id}/status", userHandler.UpdataModelStatus)
 		r.Post("/admin/orders/{id}/pay", userHandler.PayOrder)
+		r.Get("/admin/orders", userHandler.ListOrders)
 		r.Get("/admin/users/{id}/balance-transactions", userHandler.ListUserBalanceTransactions)
 		r.Get("/admin/users/{id}/usage-logs", userHandler.ListUserUsageLogs)
 		r.Patch("/admin/users/{id}/status", userHandler.UpdateUserStatus)

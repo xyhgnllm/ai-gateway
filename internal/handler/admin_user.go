@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 )
 
 type AddBalanceRequest struct {
@@ -80,7 +80,7 @@ func (h *UserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := make([]UserResponse, 9, len(users))
+	result := make([]UserResponse, 0, len(users))
 
 	for _, user := range users {
 		result = append(result, UserResponse{
