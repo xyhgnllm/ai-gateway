@@ -27,9 +27,24 @@ WHERE id = $1
 RETURNING *;
 
 
-
 -- name: ListUsers :many
 SELECT *
 FROM users
 ORDER BY id DESC
 LIMIT $1 OFFSET $2;
+
+
+-- name: UpdateUserStatus :one
+UPDATE users
+SET status = $2,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
+
+-- name: UpdateUserRole :one
+UPDATE users
+SET role = $2,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING *;

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -37,4 +38,24 @@ func getEnv(key string, fallback string) string {
 	}
 
 	return value
+}
+
+func (c *Config) Validate() error {
+	if c.DBURL == "" {
+		return fmt.Errorf("DB_URL is required")
+	}
+
+	if c.JWTSecret == "" {
+		return fmt.Errorf("JWT_SECRET is required")
+	}
+
+	if c.OpenAIBaseURL == "" {
+		return fmt.Errorf("OPENAI_BASE_URL is required")
+	}
+
+	if c.OpenAIAPIKey == "" {
+		return fmt.Errorf("OPENAI_API_KEY is required")
+	}
+
+	return nil
 }

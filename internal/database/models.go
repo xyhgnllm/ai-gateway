@@ -19,6 +19,19 @@ type ApiKey struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type BalanceTransaction struct {
+	ID                 int64
+	UserID             int64
+	Type               string
+	AmountCents        int64
+	BalanceBeforeCents int64
+	BalanceAfterCents  int64
+	OrderID            pgtype.Int8
+	UsageLogID         pgtype.Int8
+	Remark             string
+	CreatedAt          pgtype.Timestamptz
+}
+
 type Model struct {
 	ID                    int64
 	Name                  string

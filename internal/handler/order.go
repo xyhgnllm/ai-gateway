@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type CreateOrderRequest struct {
@@ -133,11 +134,20 @@ func (h *UserHandler) PayOrder(w http.ResponseWriter, r *http.Request) {
 
 	orderID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		response.Fail(w, http.StatusBadRequest, 400, "invaild order id")
+		response.Fail(w, http.StatusBadRequest, 400, "invalid order id")
 		return
 	}
 
-	order, err := h.queries.GetOrderByID(r.Context(), orderID)
+	tx, err := h.db.Begin(r.Context())
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, 500, "begin transaction failed")
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qtx := h.queries.WithTx(tx)
+
+	order, err := qtx.GetOrderByID(r.Context(), orderID)
 	if err != nil {
 		response.Fail(w, http.StatusNotFound, 404, "order not found")
 		return
@@ -148,13 +158,19 @@ func (h *UserHandler) PayOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	paidOrder, err := h.queries.MarkOrderPaid(r.Context(), orderID)
+	paidOrder, err := qtx.MarkOrderPaid(r.Context(), orderID)
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, 500, "mark order paid failed")
 		return
 	}
 
-	user, err := h.queries.AddUserBalance(r.Context(), database.AddUserBalanceParams{
+	beforeUser, err := qtx.GetUserByID(r.Context(), paidOrder.UserID)
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, 500, "get user balance failed")
+		return
+	}
+
+	user, err := qtx.AddUserBalance(r.Context(), database.AddUserBalanceParams{
 		ID:           paidOrder.UserID,
 		BalanceCents: paidOrder.AmountCents,
 	})
@@ -163,9 +179,29 @@ func (h *UserHandler) PayOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.OK(w, map[string]any{
-		"order": paidOrder,
-		"user":  user,
+	transaction, err := qtx.CreateBalanceTransaction(r.Context(), database.CreateBalanceTransactionParams{
+		UserID:             paidOrder.UserID,
+		Type:               "recharge",
+		AmountCents:        paidOrder.AmountCents,
+		BalanceBeforeCents: beforeUser.BalanceCents,
+		BalanceAfterCents:  user.BalanceCents,
+		OrderID:            pgtype.Int8{Int64: paidOrder.ID, Valid: true},
+		UsageLogID:         pgtype.Int8{Valid: false},
+		Remark:             "order recharge",
 	})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, 500, "create balance transaction failed")
+		return
+	}
 
+	if err := tx.Commit(r.Context()); err != nil {
+		response.Fail(w, http.StatusInternalServerError, 500, "commit transaction failed")
+		return
+	}
+
+	response.OK(w, map[string]any{
+		"order":       paidOrder,
+		"user":        user,
+		"transaction": transaction,
+	})
 }

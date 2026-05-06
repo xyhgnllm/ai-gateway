@@ -13,17 +13,25 @@ import (
 	"ai-gateway/internal/response"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type GatewayHandler struct {
 	queries       *database.Queries
+	db            *pgxpool.Pool
 	openAIBaseURL string
 	openAIAPIKey  string
 }
 
-func NewGatewayHandler(queries *database.Queries, openAIBaseURL string, openAIAPIKey string) *GatewayHandler {
+func NewGatewayHandler(
+	queries *database.Queries,
+	db *pgxpool.Pool,
+	openAIBaseURL string,
+	openAIAPIKey string,
+) *GatewayHandler {
 	return &GatewayHandler{
 		queries:       queries,
+		db:            db,
 		openAIBaseURL: openAIBaseURL,
 		openAIAPIKey:  openAIAPIKey,
 	}
@@ -114,6 +122,11 @@ func (h *GatewayHandler) ChatCompletions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if user.Status != "active" {
+		response.Fail(w, http.StatusForbidden, 403, "user is disabled")
+		return
+	}
+
 	if user.BalanceCents < costCents {
 		response.Fail(w, http.StatusPaymentRequired, 402, "insufficient banlance")
 		return
@@ -137,28 +150,72 @@ func (h *GatewayHandler) ChatCompletions(w http.ResponseWriter, r *http.Request)
 	success := upstreamResp.StatusCode >= 200 && upstreamResp.StatusCode < 300
 
 	if success {
-		_, err = h.queries.DeductUserBalance(r.Context(), database.DeductUserBalanceParams{
+		tx, err := h.db.Begin(r.Context())
+		if err != nil {
+			response.Fail(w, http.StatusInternalServerError, 500, "begin transaction failed")
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		qtx := h.queries.WithTx(tx)
+
+		deductedUser, err := qtx.DeductUserBalance(r.Context(), database.DeductUserBalanceParams{
 			ID:           userID,
 			BalanceCents: costCents,
 		})
-
 		if err != nil {
 			response.Fail(w, http.StatusPaymentRequired, 402, "insufficient balance")
 			return
 		}
-	}
 
-	_, _ = h.queries.CreateUsageLog(r.Context(), database.CreateUsageLogParams{
-		UserID:            userID,
-		ApiKeyID:          pgtype.Int8{Int64: apiKeyID, Valid: true},
-		Model:             payload.Model,
-		Endpoint:          "/v1/chat/completions",
-		StatusCode:        int32(upstreamResp.StatusCode),
-		Success:           success,
-		RequestBodyBytes:  int64(len(requestBody)),
-		ResponseBodyBytes: int64(len(responseBody)),
-		CostCents:         costCents,
-	})
+		usageLog, err := qtx.CreateUsageLog(r.Context(), database.CreateUsageLogParams{
+			UserID:            userID,
+			ApiKeyID:          pgtype.Int8{Int64: apiKeyID, Valid: true},
+			Model:             payload.Model,
+			Endpoint:          "/v1/chat/completions",
+			StatusCode:        int32(upstreamResp.StatusCode),
+			Success:           true,
+			RequestBodyBytes:  int64(len(requestBody)),
+			ResponseBodyBytes: int64(len(responseBody)),
+			CostCents:         costCents,
+		})
+		if err != nil {
+			response.Fail(w, http.StatusInternalServerError, 500, "create usage log failed")
+			return
+		}
+
+		_, err = qtx.CreateBalanceTransaction(r.Context(), database.CreateBalanceTransactionParams{
+			UserID:             userID,
+			Type:               "consume",
+			AmountCents:        -costCents,
+			BalanceBeforeCents: user.BalanceCents,
+			BalanceAfterCents:  deductedUser.BalanceCents,
+			OrderID:            pgtype.Int8{Valid: false},
+			UsageLogID:         pgtype.Int8{Int64: usageLog.ID, Valid: true},
+			Remark:             "chat completion consume",
+		})
+		if err != nil {
+			response.Fail(w, http.StatusInternalServerError, 500, "create balance transaction failed")
+			return
+		}
+
+		if err := tx.Commit(r.Context()); err != nil {
+			response.Fail(w, http.StatusInternalServerError, 500, "commit transaction failed")
+			return
+		}
+	} else {
+		_, _ = h.queries.CreateUsageLog(r.Context(), database.CreateUsageLogParams{
+			UserID:            userID,
+			ApiKeyID:          pgtype.Int8{Int64: apiKeyID, Valid: true},
+			Model:             payload.Model,
+			Endpoint:          "/v1/chat/completions",
+			StatusCode:        int32(upstreamResp.StatusCode),
+			Success:           false,
+			RequestBodyBytes:  int64(len(requestBody)),
+			ResponseBodyBytes: int64(len(responseBody)),
+			CostCents:         0,
+		})
+	}
 
 	w.Header().Set("Content-Type", upstreamResp.Header.Get("Content-Type"))
 	w.WriteHeader(upstreamResp.StatusCode)

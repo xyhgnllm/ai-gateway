@@ -1,0 +1,11 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-gateway-api
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi"
 )
@@ -93,4 +94,92 @@ func (h *UserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.OK(w, result)
+}
+
+type UpdateUserStatusRequest struct {
+	Status string `json:"status"`
+}
+
+func (h *UserHandler) UpdateUserStatus(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+
+	userID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, 400, "invalid user id")
+		return
+	}
+
+	var req UpdateUserStatusRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		return
+	}
+
+	req.Status = strings.TrimSpace(req.Status)
+	if req.Status != "active" && req.Status != "disabled" {
+		response.Fail(w, http.StatusBadRequest, 400, "invalid status")
+		return
+	}
+
+	user, err := h.queries.UpdateUserStatus(r.Context(), database.UpdateUserStatusParams{
+		ID:     userID,
+		Status: req.Status,
+	})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, 500, "update user status failed")
+		return
+	}
+
+	response.OK(w, UserResponse{
+		ID:           user.ID,
+		Email:        user.Email,
+		Name:         user.Name,
+		Role:         user.Role,
+		Status:       user.Status,
+		BalanceCents: user.BalanceCents,
+	})
+}
+
+type UpdateUserRoleRequest struct {
+	Role string `json:"role"`
+}
+
+func (h *UserHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+
+	userID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		response.Fail(w, http.StatusBadRequest, 400, "invalid user id")
+		return
+	}
+
+	var req UpdateUserRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Fail(w, http.StatusBadRequest, 400, "invalid request body")
+		return
+	}
+
+	req.Role = strings.TrimSpace(req.Role)
+	if req.Role != "user" && req.Role != "admin" {
+		response.Fail(w, http.StatusBadRequest, 400, "invalid role")
+		return
+	}
+
+	user, err := h.queries.UpdateUserRole(r.Context(), database.UpdateUserRoleParams{
+		ID:   userID,
+		Role: req.Role,
+	})
+	if err != nil {
+		response.Fail(w, http.StatusInternalServerError, 500, "update user role failed")
+		return
+	}
+
+	response.OK(w, UserResponse{
+		ID:           user.ID,
+		Email:        user.Email,
+		Name:         user.Name,
+		Role:         user.Role,
+		Status:       user.Status,
+		BalanceCents: user.BalanceCents,
+	})
 }

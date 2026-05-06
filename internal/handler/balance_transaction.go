@@ -1,17 +1,22 @@
 package handler
 
 import (
+	"net/http"
+	"strconv"
+
 	"ai-gateway/internal/database"
 	"ai-gateway/internal/middleware"
 	"ai-gateway/internal/response"
-	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi"
 )
 
-func (h *UserHandler) ListUsageLogs(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) ListBalanceTransactions(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(middleware.UserIDKey).(int64)
+	if !ok {
+		response.Fail(w, http.StatusUnauthorized, 401, "unauthorized")
+		return
+	}
 
 	page, _ := strconv.ParseInt(r.URL.Query().Get("page"), 10, 64)
 	pageSize, _ := strconv.ParseInt(r.URL.Query().Get("page_size"), 10, 64)
@@ -26,26 +31,20 @@ func (h *UserHandler) ListUsageLogs(w http.ResponseWriter, r *http.Request) {
 
 	offset := (page - 1) * pageSize
 
-	if !ok {
-		response.Fail(w, http.StatusUnauthorized, 401, "unauthorized")
-		return
-	}
-
-	logs, err := h.queries.ListUsageLogsByUser(r.Context(), database.ListUsageLogsByUserParams{
+	transactions, err := h.queries.ListBalanceTransactionsByUser(r.Context(), database.ListBalanceTransactionsByUserParams{
 		UserID: userID,
 		Limit:  int32(pageSize),
 		Offset: int32(offset),
 	})
-
 	if err != nil {
-		response.Fail(w, http.StatusInternalServerError, 500, "list usage logs failed")
+		response.Fail(w, http.StatusInternalServerError, 500, "list balance transactions failed")
 		return
 	}
 
-	response.OK(w, logs)
+	response.OK(w, transactions)
 }
 
-func (h *UserHandler) ListUserUsageLogs(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) ListUserBalanceTransactions(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 
 	userID, err := strconv.ParseInt(idStr, 10, 64)
@@ -67,15 +66,15 @@ func (h *UserHandler) ListUserUsageLogs(w http.ResponseWriter, r *http.Request) 
 
 	offset := (page - 1) * pageSize
 
-	logs, err := h.queries.ListUsageLogsByUser(r.Context(), database.ListUsageLogsByUserParams{
+	transactions, err := h.queries.ListBalanceTransactionsByUser(r.Context(), database.ListBalanceTransactionsByUserParams{
 		UserID: userID,
 		Limit:  int32(pageSize),
 		Offset: int32(offset),
 	})
 	if err != nil {
-		response.Fail(w, http.StatusInternalServerError, 500, "list user usage logs failed")
+		response.Fail(w, http.StatusInternalServerError, 500, "list user balance transactions failed")
 		return
 	}
 
-	response.OK(w, logs)
+	response.OK(w, transactions)
 }

@@ -11,16 +11,19 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type UserHandler struct {
 	queries   *database.Queries
+	db        *pgxpool.Pool
 	jwtSecret string
 }
 
-func NewUserHandler(queries *database.Queries, jwtSecret string) *UserHandler {
+func NewUserHandler(queries *database.Queries, db *pgxpool.Pool, jwtSecret string) *UserHandler {
 	return &UserHandler{
 		queries:   queries,
+		db:        db,
 		jwtSecret: jwtSecret,
 	}
 }
@@ -131,6 +134,12 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		response.Fail(w, http.StatusUnauthorized, 401, "invalid email or password")
 		return
 	}
+
+	if user.Status != "active" {
+		response.Fail(w, http.StatusForbidden, 403, "user is disabled")
+		return
+	}
+
 	token, err := auth.GenerateToken(user.ID, user.Role, h.jwtSecret)
 	if err != nil {
 		response.Fail(w, http.StatusInternalServerError, 500, "generate token failed")
